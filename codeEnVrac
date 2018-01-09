@@ -1,0 +1,395 @@
+import java.awt.*;
+import javax.swing.*;
+
+public class Overview {
+
+
+	public static void main(String[] args) throws InterruptedException {
+		JFrame frame = new JFrame("Eight Queens");
+		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		
+//		String demo = "8_reines_classique";
+		String demo = "8_reines_contraintes_globales";
+//		String demo = "nonogramme";
+		
+		
+		
+//		Chouette, une boite à Outils de Contraintes orientée Object ( === CHOCO ) + médailles concours MiniZinc
+		
+		
+//		Menu :
+//		1) Présentation d'un programme Choco classique ==> problème des 8 reines
+//		2) Même problème mais avec approche contraintes globales
+//		3) Problème du nonogramme (présentation de la contrainte NON-GLOBALE regular() )
+
+// 		==========================================================================================		//
+		
+//		1) 8 Reines - classique
+
+		if (demo == "8_reines_classique") {
+			EightQueens eightQueens = new EightQueens(frame);
+			eightQueens.run();
+
+			eightQueens.setPreferredSize(new Dimension(600, 600));
+		}
+// 		==========================================================================================		//
+		
+//		2) 8 Reines - contraintes globales
+
+		if (demo == "8_reines_contraintes_globales") {
+			EightQueensGlobal eightQueensGlobal = new EightQueensGlobal(frame);
+			eightQueensGlobal.run();
+
+			eightQueensGlobal.setPreferredSize(new Dimension(600, 600));
+		}
+// 		==========================================================================================		//
+		
+		
+//		3) Nonogramme 
+
+		if (demo == "nonogramme") {
+			Nonogram nonogram = new Nonogram();
+			nonogram.run();
+
+		}
+		
+		
+		
+	}
+}
+
+
+
+
+
+
+import org.chocosolver.solver.Model;
+import org.chocosolver.solver.Solution;
+import org.chocosolver.solver.Solver;
+import org.chocosolver.solver.variables.IntVar;
+
+import java.awt.*;
+import javax.swing.*;
+
+
+public class EightQueens extends JPanel {
+	private static final long serialVersionUID = 1L;
+	private Model model;
+	private Solution solution;
+	private IntVar[] vars;
+	private Board board;
+	private JFrame frame;
+	private Boolean animation = false ;
+
+	public EightQueens(JFrame frame) {
+		super();
+		this.frame = frame;
+	}
+	
+	public void run() throws InterruptedException {
+		
+//		Création du modèle ==> Cadre fondamental d'un programme choco
+//		Il va contenir les variables, les contraintes et le solveur 
+		int n = 8;
+		this.model = new Model(n + "-queens problem");
+		this.vars = new IntVar[n];
+
+//		On déclare 8 variables entières nommées Q_i avec comme domaine [1 , n]
+		for(int q = 0; q < n; q++){
+			this.vars[q] = this.model.intVar("Q_"+q, 1, n);
+		}
+		
+		for(int i  = 0; i < n-1; i++){
+			for(int j = i + 1; j < n; j++){
+				this.model.arithm(this.vars[i], "!=", this.vars[j] 			  ).post(); // Contraintes de ligne
+				this.model.arithm(this.vars[i], "!=", this.vars[j], "-", j - i).post(); // Contraintes de diagonale descendante
+				this.model.arithm(this.vars[i], "!=", this.vars[j], "+", j - i).post(); // Contraintes de diagonale ascendante
+			}
+		}
+		
+//		Exemple de contrainte supplémentaire si l'on souhaite par exemple fixer la ligne d'une des reines
+//		this.model.arithm(this.vars[0], "=", 1).post();
+
+		
+// 		Cette ligne permet d'afficher les statistiques concernant le modèle, tq nombre de variables, de contraintes et d'autre récupérées pendant la résolution
+		Solver solver = this.model.getSolver();		
+		solver.showStatistics();
+		
+		this.solution = this.model.getSolver().findSolution();		
+		if(this.solution != null){
+			System.out.println(this.solution.toString());
+			if (this.animation == true) {
+
+				this.board = new Board(this.solution, this.vars);
+				this.frame.setPreferredSize(new Dimension(600, 600));
+				this.frame.add(this.board);
+				this.frame.pack();
+				this.frame.setVisible(true);
+				Thread.sleep(2000);
+			}
+		}
+
+		while (solver.solve()) {
+			this.solution.record();
+			System.out.println(this.solution.toString());
+			if (this.animation == true) {
+
+				Thread.sleep(2000);
+				this.board = new Board(this.solution, this.vars);
+				this.frame.setPreferredSize(new Dimension(600, 600));
+				this.frame.add(this.board);
+				this.frame.pack();
+				this.frame.setVisible(true);
+			}
+		
+		}
+	}
+
+}
+
+
+
+
+
+import java.awt.Color;
+import java.awt.Graphics;
+
+import javax.swing.JPanel;
+
+import org.chocosolver.solver.Solution;
+import org.chocosolver.solver.variables.IntVar;
+
+public class Board extends JPanel {
+	private static final long serialVersionUID = 1L;
+	private Solution solution;
+	private IntVar[] vars;
+
+	
+	Board(Solution solution, IntVar[] vars){
+		this.solution = solution;
+		this.vars = vars;
+	}
+	
+	public void paintComponent(Graphics g) {
+		super.paintComponent(g);
+		// Drawing the board
+		int TLX = 50;
+		int TLY = 50;
+		int cellW = 60;
+		Color c;
+		c = new Color(150,150,150);
+		g.setColor(c);
+		g.fillRect(TLX, TLY, cellW*8, cellW*8);
+		
+		c = new Color(200,200,200);
+		g.setColor(c);
+		for (int i = 0 ; i < 8 ; i++ ) {
+			for (int j = 0 ; j < 8 ; j++ ) {
+				if ((i+j)%2 == 0) {
+					g.fillRect(TLX+i*cellW, TLY+j*cellW, cellW, cellW);
+				}
+			}
+		}
+		g.setColor(Color.black);
+		g.drawRect(TLX, TLY, cellW*8, cellW*8);
+		
+		// Drawing the queens :
+		
+		for (int i = 0 ; i < 8 ; i++ ) {
+			int j = this.solution.getIntVal(this.vars[i]);
+			g.fillOval(TLX+i*cellW+10, TLY+(j-1)*cellW+10,cellW-20, cellW-20);
+				
+		}
+		
+	}
+}
+
+
+
+import org.chocosolver.solver.Model;
+import org.chocosolver.solver.Solution;
+import org.chocosolver.solver.Solver;
+import org.chocosolver.solver.variables.IntVar;
+
+import java.awt.*;
+import javax.swing.*;
+
+
+public class EightQueensGlobal extends JPanel {
+	private static final long serialVersionUID = 1L;
+	private Model model;
+	private Solution solution;
+	private IntVar[] vars;
+	private Board board;
+	private JFrame frame;
+	private Boolean animation = false ;
+
+	public EightQueensGlobal(JFrame frame) {
+		super();
+		this.frame = frame;
+	}
+
+	public void run() throws InterruptedException {
+
+		//		Création du modèle et des variables
+		int n = 8;
+		this.model = new Model(n + "-queens problem");
+		this.vars = new IntVar[n];
+
+		//		On déclare 8 variables entières nommées Q_i avec comme domaine [1 , n]
+		for(int q = 0; q < n; q++){
+			this.vars[q] = this.model.intVar("Q_"+q, 1, n);
+		}
+
+		// 		On rajoute 8 variables pour chaque diagonale
+		IntVar[] diag1 = new IntVar[n];
+		IntVar[] diag2 = new IntVar[n];
+		for(int i = 0 ; i < n; i++){
+			diag1[i] = this.vars[i].sub(i).intVar();
+			diag2[i] = this.vars[i].add(i).intVar();
+		}
+		model.post(
+				model.allDifferent(this.vars),
+				model.allDifferent(diag1),
+				model.allDifferent(diag2)
+				);
+
+		//		Exemple de contrainte supplémentaire si l'on souhaite par exemple fixer la ligne d'une des reines
+		//		this.model.arithm(this.vars[0], "=", 1).post();
+
+		Solver solver = this.model.getSolver();
+
+		solver.showStatistics();
+		this.solution = this.model.getSolver().findSolution();
+
+
+		if(this.solution != null){
+			System.out.println(this.solution.toString());
+			if (this.animation == true) {
+
+				this.board = new Board(this.solution, this.vars);
+				this.frame.setPreferredSize(new Dimension(600, 600));
+				this.frame.add(this.board);
+				this.frame.pack();
+				this.frame.setVisible(true);
+				Thread.sleep(200);
+			}
+		}
+
+		while (solver.solve()) {
+			this.solution.record();
+			System.out.println(this.solution.toString());
+
+			if (this.animation == true) {
+				Thread.sleep(200);
+				this.board = new Board(this.solution, this.vars);
+				this.frame.setPreferredSize(new Dimension(600, 600));
+				this.frame.add(this.board);
+				this.frame.pack();
+				this.frame.setVisible(true);
+			}
+
+		}
+	}
+
+}
+
+
+
+import org.chocosolver.solver.Model;
+import org.chocosolver.solver.Solver;
+import org.chocosolver.solver.constraints.nary.automata.FA.FiniteAutomaton;
+import org.chocosolver.solver.constraints.nary.automata.FA.IAutomaton;
+import org.chocosolver.solver.variables.BoolVar;
+import org.chocosolver.util.tools.ArrayUtils;
+
+
+
+public class Nonogram {
+
+	private void dfa(BoolVar[] cells, int[] rest, Model model) {
+		StringBuilder regexp = new StringBuilder("0*");						// Autant de 0 que l'on veut devant le mot						: 0*
+		int m = rest.length;
+		for (int i = 0; i < m; i++) {
+			regexp.append('1').append('{').append(rest[i]).append('}');		// Pour chaque chiffre x de BLOCKS, on veut ce nombre de '1' 	: 1{x}
+			regexp.append('0');												// Entre chaque bloc de '1', il faut obligatoirement un '0' 	
+			regexp.append(i == m - 1 ? '*' : '+');							// donc on met un + sauf si c'était le dernier chiffre, auquel cas, une étoile
+		}
+		
+		// On construit regexp de sorte à  ce que la chaine ressemble à :  0*1{4}0+1{2}0*
+		IAutomaton auto = new FiniteAutomaton(regexp.toString());
+		model.regular(cells, auto).post();
+	}
+
+	public void run() {
+		// number of columns
+		int N = 15;
+		// number of rows
+		int M = 15;
+		// sequence of shaded blocks
+		int[][][] BLOCKS =
+				new int[][][]{{
+					{2},
+					{4, 2},
+					{1, 1, 4},
+					{1, 1, 1, 1},
+					{1, 1, 1, 1},
+					{1, 1, 1, 1},
+					{1, 1, 1, 1},
+					{1, 1, 1, 1},
+					{1, 2, 2, 1},
+					{1, 3, 1},
+					{2, 1},
+					{1, 1, 1, 2},
+					{2, 1, 1, 1},
+					{1, 2},
+					{1, 2, 1},
+				}, {
+					{3},
+					{3},
+					{10},
+					{2},
+					{2},
+					{8, 2},
+					{2},
+					{1, 2, 1},
+					{2, 1},
+					{7},
+					{2},
+					{2},
+					{10},
+					{3},
+					{2}}};
+
+					Model model = new Model("Nonogram");
+					// Déclaration des variables : une seule matrice de booléens de dimensions N x M
+					BoolVar[][] cells = model.boolVarMatrix("c", N, M);
+					
+//					
+//					Déclaration des contraintes
+//					On crée un automate fini déterministe par ligne et un afd par colonne
+//					( fonction dfa plus haut, qui définit un afd puis qui appelle la contrainte regular
+//					qui, elle, vérifie si un mot appartient bien au langage défini par l'automate )
+					
+					for (int i = 0; i < M; i++) {
+						dfa(cells[i], BLOCKS[0][i], model);
+					}
+					for (int j = 0; j < N; j++) {
+						dfa(ArrayUtils.getColumn(cells, j), BLOCKS[1][j], model);
+					}
+					Solver solver = model.getSolver();
+					solver.showStatistics();
+
+					if(model.getSolver().solve()){
+						for (int i = 0; i < cells.length; i++) {
+							System.out.printf("\t");
+							for (int j = 0; j < cells[i].length; j++) {
+								System.out.printf(cells[i][j].getValue() == 1 ? "#" : " ");
+							}
+							System.out.printf("\n");
+						}
+					}
+	}
+}
+
+
